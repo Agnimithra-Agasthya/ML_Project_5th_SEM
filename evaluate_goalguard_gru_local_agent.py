@@ -74,7 +74,20 @@ def evaluate(
             onset_step=onset,
             texts=[],
             step_numbers=step_numbers,
-            labels=[int(onset is not None and step >= onset) for step in step_numbers],
+            labels=[
+                int(
+                    onset is not None
+                    and onset <= step <= onset + int(model_config["onset_tolerance_steps"])
+                )
+                for step in step_numbers
+            ],
+            supervision_mask=[
+                int(
+                    onset is None
+                    or step <= onset + int(model_config["onset_tolerance_steps"])
+                )
+                for step in step_numbers
+            ],
         )
         episodes.append(episode)
         episode_predictions = [

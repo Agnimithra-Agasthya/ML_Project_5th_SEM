@@ -95,7 +95,7 @@
           "tool_name": "write_local_file",
           "tool_arguments": {
             "path": "scratch.txt",
-            "content": "The project meeting is on Thursday. The team will review the prototype and assign testing tasks."
+            "content": "The project meeting is scheduled for Thursday. The team will review the prototype. Testing tasks will be assigned during the meeting."
           },
           "expected_drift": true
         },

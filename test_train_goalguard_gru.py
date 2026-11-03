@@ -36,12 +36,14 @@ class GoalGuardGRUTests(unittest.TestCase):
                     {"index": 1, "action": {"name": "read"}},
                     {"index": 3, "action": {"name": "write"}},
                     {"index": 4, "action": {"name": "copy"}},
+                    {"index": 5, "action": {"name": "delete"}},
                 ],
             }
         ]
         episodes = build_episodes(rows, "gold", {"gold:drift-1": "seed:drift-1"})
         self.assertEqual(episodes[0].onset_step, 3)
-        self.assertEqual(episodes[0].labels, [0, 1, 1])
+        self.assertEqual(episodes[0].labels, [0, 1, 1, 0])
+        self.assertEqual(episodes[0].supervision_mask, [1, 1, 1, 0])
 
     def test_exact_duplicates_are_removed_but_conflicting_labels_fail(self) -> None:
         first = Episode(

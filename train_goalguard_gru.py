@@ -32,6 +32,7 @@ from torch.utils.data import DataLoader, Dataset
 
 
 SEED = 42
+DETECTION_TOLERANCE_STEPS = 1
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_]+|[^\w\s]", re.UNICODE)
 PAD_TOKEN = "<PAD>"
 UNK_TOKEN = "<UNK>"
@@ -49,6 +50,7 @@ class Episode:
     texts: list[str]
     step_numbers: list[int]
     labels: list[int]
+    supervision_mask: list[int] | None = None
 
 
 def parse_json_value(value: Any, field: str, record_id: str) -> Any:
@@ -66,12 +68,16 @@ def render_action_step(goal: str, step: dict[str, Any]) -> str:
     action = step.get("action") or {}
     if not isinstance(action, dict):
         action = {"raw": str(action)}
+    current_goal = str(step.get("current_goal") or goal)
+    goal_context = f"Original goal: {goal}. "
+    if current_goal != goal:
+        goal_context += f"Latest authorized goal revision: {current_goal}. "
     arguments = action.get("args")
     observation = step.get("observation")
     if isinstance(observation, (dict, list)):
         observation = json.dumps(observation, ensure_ascii=False, sort_keys=True)
     return (
-        f"Original goal: {goal}. "
+        goal_context +
         f"Action type: {action.get('type') or ''}. "
         f"Tool: {action.get('name') or ''}. "
         f"Tool class: {action.get('class') or ''}. "
@@ -337,6 +343,7 @@ def build_episodes(
         if DECISION_LABELS[decision] == 0:
             onset = None
             targets = [0] * len(parsed_steps)
+            supervision_mask = [1] * len(parsed_steps)
         else:
             raw_onset = row.get("drift_step")
             if raw_onset is None:
@@ -355,7 +362,14 @@ def build_episodes(
                 raise ValueError(
                     f"{record_id}: drift_step {onset} is absent from trajectory indexes"
                 )
-            targets = [int(step_number >= onset) for step_number in step_numbers]
+            targets = [
+                int(onset <= step_number <= onset + DETECTION_TOLERANCE_STEPS)
+                for step_number in step_numbers
+            ]
+            supervision_mask = [
+                int(step_number <= onset + DETECTION_TOLERANCE_STEPS)
+                for step_number in step_numbers
+            ]
 
         family = family_for_record[f"{source}:{record_id}"]
         episodes.append(
@@ -369,6 +383,7 @@ def build_episodes(
                 texts=texts,
                 step_numbers=step_numbers,
                 labels=targets,
+                supervision_mask=supervision_mask,
             )
         )
     return episodes
@@ -391,6 +406,7 @@ def deduplicate_episodes(episodes: list[Episode]) -> tuple[list[Episode], int]:
         if (
             previous.step_numbers != episode.step_numbers
             or previous.labels != episode.labels
+            or previous.supervision_mask != episode.supervision_mask
         ):
             raise ValueError(
                 "Exact duplicate trajectories have conflicting step indexes or labels: "
@@ -449,6 +465,11 @@ class EpisodeDataset(Dataset):
         return {
             "tokens": self.encoded[index],
             "labels": episode.labels,
+            "supervision_mask": (
+                episode.supervision_mask
+                if episode.supervision_mask is not None
+                else [1] * len(episode.labels)
+            ),
             "step_numbers": episode.step_numbers,
             "family_weight": self.family_weights[index],
         }
@@ -461,6 +482,7 @@ def collate_episodes(batch: list[dict[str, Any]]) -> dict[str, torch.Tensor]:
     tokens = torch.zeros((batch_size, max_steps, max_tokens), dtype=torch.long)
     labels = torch.zeros((batch_size, max_steps), dtype=torch.float32)
     mask = torch.zeros((batch_size, max_steps), dtype=torch.bool)
+    supervision_mask = torch.zeros((batch_size, max_steps), dtype=torch.bool)
     lengths = torch.zeros(batch_size, dtype=torch.long)
     family_weights = torch.zeros(batch_size, dtype=torch.float32)
     for batch_index, item in enumerate(batch):
@@ -472,10 +494,14 @@ def collate_episodes(batch: list[dict[str, Any]]) -> dict[str, torch.Tensor]:
             )
             labels[batch_index, step_index] = item["labels"][step_index]
             mask[batch_index, step_index] = True
+            supervision_mask[batch_index, step_index] = bool(
+                item["supervision_mask"][step_index]
+            )
     return {
         "tokens": tokens,
         "labels": labels,
         "mask": mask,
+        "supervision_mask": supervision_mask,
         "lengths": lengths,
         "family_weights": family_weights,
     }
@@ -568,6 +594,7 @@ def predict_trajectory_steps(
         texts=texts,
         step_numbers=step_numbers,
         labels=[0] * len(texts),
+        supervision_mask=[1] * len(texts),
     )
     dataset = EpisodeDataset(
         [episode],
@@ -630,7 +657,7 @@ def batch_loss(
         pos_weight=torch.tensor(positive_weight, dtype=torch.float32),
     )
     losses = criterion(logits, batch["labels"])
-    mask = batch["mask"].float()
+    mask = batch["supervision_mask"].float()
     per_episode = (losses * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)
     weights = batch["family_weights"]
     return (per_episode * weights).sum() / weights.sum().clamp(min=1e-8)
@@ -720,6 +747,13 @@ def event_metrics(
     clean = [row for row in details if row["true_onset_step"] is None]
     positive = [row for row in details if row["true_onset_step"] is not None]
     delays = [row["delay_steps"] for row in details if row["delay_steps"] is not None]
+    clean_by_family: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in clean:
+        clean_by_family[row["family_id"]].append(row)
+    false_alarm_families = sum(
+        any(row["predicted_onset_step"] is not None for row in family_rows)
+        for family_rows in clean_by_family.values()
+    )
     precision = tp / (tp + fp) if tp + fp else 0.0
     recall = tp / (tp + fn) if tp + fn else 0.0
     return (
@@ -752,6 +786,13 @@ def event_metrics(
                     / len(clean)
                 )
                 if clean
+                else None
+            ),
+            "aligned_template_count": len(clean_by_family),
+            "false_alarm_on_aligned_templates": int(false_alarm_families),
+            "aligned_template_false_alarm_rate": (
+                float(false_alarm_families / len(clean_by_family))
+                if clean_by_family
                 else None
             ),
             "event_precision": float(precision),
@@ -809,8 +850,24 @@ def step_metrics(
     predictions: list[np.ndarray],
     threshold: float,
 ) -> dict[str, Any]:
-    y_true = np.asarray([label for episode in episodes for label in episode.labels])
-    scores = np.concatenate(predictions)
+    y_true_values: list[int] = []
+    score_values: list[float] = []
+    for episode, episode_scores in zip(episodes, predictions):
+        supervised = (
+            episode.supervision_mask
+            if episode.supervision_mask is not None
+            else [1] * len(episode.labels)
+        )
+        y_true_values.extend(
+            label for label, include in zip(episode.labels, supervised) if include
+        )
+        score_values.extend(
+            float(score)
+            for score, include in zip(episode_scores, supervised)
+            if include
+        )
+    y_true = np.asarray(y_true_values)
+    scores = np.asarray(score_values)
     predicted = scores >= threshold
     tn, fp, fn, tp = confusion_matrix(y_true, predicted, labels=[0, 1]).ravel()
     metrics: dict[str, Any] = {
@@ -861,17 +918,32 @@ def train_time_only_baseline(
     test_episodes: list[Episode],
     tolerance: int,
 ) -> dict[str, Any]:
-    def features(episodes: list[Episode]) -> tuple[np.ndarray, np.ndarray]:
+    def features(
+        episodes: list[Episode], supervised_only: bool
+    ) -> tuple[np.ndarray, np.ndarray]:
+        x_values: list[list[int]] = []
+        y_values: list[int] = []
+        for episode in episodes:
+            mask = (
+                episode.supervision_mask
+                if episode.supervision_mask is not None
+                else [1] * len(episode.labels)
+            )
+            for step, label, include in zip(
+                episode.step_numbers, episode.labels, mask
+            ):
+                if include or not supervised_only:
+                    x_values.append([step])
+                    y_values.append(label)
         x = np.asarray(
-            [[step] for episode in episodes for step in episode.step_numbers],
-            dtype=np.float64,
+            x_values, dtype=np.float64
         )
-        y = np.asarray([label for episode in episodes for label in episode.labels])
+        y = np.asarray(y_values)
         return x, y
 
-    x_train, y_train = features(train_episodes)
-    x_validation, _ = features(validation_episodes)
-    x_test, _ = features(test_episodes)
+    x_train, y_train = features(train_episodes, supervised_only=True)
+    x_validation, _ = features(validation_episodes, supervised_only=False)
+    x_test, _ = features(test_episodes, supervised_only=False)
     model = LogisticRegression(
         class_weight="balanced", max_iter=1000, random_state=SEED, solver="liblinear"
     )
@@ -895,6 +967,7 @@ def train_time_only_baseline(
     test_probs = episode_probabilities(test_episodes, x_test)
     event, _ = event_metrics(test_episodes, test_probs, threshold, tolerance)
     return {
+        "training_scope": "onset decision window and pre-onset/aligned prefixes only",
         "validation_selected_threshold": threshold,
         "test_event_metrics": event,
         "test_step_metrics": step_metrics(test_episodes, test_probs, threshold),
@@ -902,6 +975,26 @@ def train_time_only_baseline(
 
 
 def describe_split(episodes: list[Episode]) -> dict[str, Any]:
+    supervised_steps = sum(
+        sum(
+            episode.supervision_mask
+            if episode.supervision_mask is not None
+            else [1] * len(episode.labels)
+        )
+        for episode in episodes
+    )
+    positive_steps = sum(
+        sum(
+            label * include
+            for label, include in zip(
+                episode.labels,
+                episode.supervision_mask
+                if episode.supervision_mask is not None
+                else [1] * len(episode.labels),
+            )
+        )
+        for episode in episodes
+    )
     return {
         "episodes": len(episodes),
         "seed_families": len({episode.family_id for episode in episodes}),
@@ -909,9 +1002,17 @@ def describe_split(episodes: list[Episode]) -> dict[str, Any]:
         "decisions": dict(Counter(episode.decision for episode in episodes)),
         "categories": dict(Counter(episode.category for episode in episodes)),
         "steps": sum(len(episode.step_numbers) for episode in episodes),
-        "positive_steps": sum(sum(episode.labels) for episode in episodes),
-        "negative_steps": sum(
-            len(episode.labels) - sum(episode.labels) for episode in episodes
+        "supervised_steps": supervised_steps,
+        "positive_steps": positive_steps,
+        "negative_steps": supervised_steps - positive_steps,
+        "excluded_late_drift_steps": sum(
+            len(episode.labels)
+            - sum(
+                episode.supervision_mask
+                if episode.supervision_mask is not None
+                else [1] * len(episode.labels)
+            )
+            for episode in episodes
         ),
         "step_lengths": dict(Counter(len(episode.step_numbers) for episode in episodes)),
     }
@@ -1021,10 +1122,27 @@ def run(
         generator=generator,
     )
 
-    positive_steps = sum(sum(episode.labels) for episode in train_episodes)
-    negative_steps = sum(
-        len(episode.labels) - sum(episode.labels) for episode in train_episodes
+    positive_steps = sum(
+        sum(
+            label * include
+            for label, include in zip(
+                episode.labels,
+                episode.supervision_mask
+                if episode.supervision_mask is not None
+                else [1] * len(episode.labels),
+            )
+        )
+        for episode in train_episodes
     )
+    supervised_steps = sum(
+        sum(
+            episode.supervision_mask
+            if episode.supervision_mask is not None
+            else [1] * len(episode.labels)
+        )
+        for episode in train_episodes
+    )
+    negative_steps = supervised_steps - positive_steps
     positive_weight = float(negative_steps / max(positive_steps, 1))
     model = GoalDriftGRU(len(vocab))
     optimizer = torch.optim.AdamW(
@@ -1073,7 +1191,7 @@ def run(
     validation_probabilities = predict_probabilities(
         model, validation_dataset, batch_size
     )
-    tolerance = 1
+    tolerance = DETECTION_TOLERANCE_STEPS
     threshold, validation_event_metrics = choose_event_threshold(
         validation_episodes, validation_probabilities, tolerance
     )
@@ -1118,12 +1236,22 @@ def run(
             "hugging_face_dataset": "jash-ai/agentic-redteam-benchmark",
         },
         "label_mapping": {
-            "KILL_SESSION": "drift; steps >= drift_step are positive",
-            "WARN": "drift; steps >= drift_step are positive",
+            "KILL_SESSION": (
+                "drift onset; onset step and the following step are positive, "
+                "pre-onset steps are negative, later drift steps are excluded from loss"
+            ),
+            "WARN": (
+                "drift onset; onset step and the following step are positive, "
+                "pre-onset steps are negative, later drift steps are excluded from loss"
+            ),
             "CONTINUE": "fully aligned negative-control trajectory; all steps are negative",
             "important": (
                 "CONTINUE records can still have a populated drift_step field. The decision label "
                 "takes precedence: do not treat that field as a true onset for CONTINUE."
+            ),
+            "objective": (
+                "At each observed prefix, classify whether the current step is the onset step "
+                "or the immediately following step. No future trajectory steps are model inputs."
             ),
         },
         "provenance": {
@@ -1185,14 +1313,24 @@ def run(
                 "future steps",
             ],
             "loss": (
-                "per-trajectory average binary cross-entropy, positive-class weighted, "
-                "with inverse variant-count family weighting"
+                "per-trajectory average binary cross-entropy over pre-onset/aligned negatives "
+                "and onset-through-one-step-later positives; later drift steps are excluded "
+                "from supervision; positive-class weighted with inverse variant-count family weighting"
             ),
             "early_stopping": {
                 "criterion": "minimum validation loss",
                 "best_epoch": best_epoch,
                 "epochs_run": len(training_history),
                 "best_validation_loss": best_validation_loss,
+            },
+            "training_target": {
+                "positive_window": [
+                    "drift onset step",
+                    f"{DETECTION_TOLERANCE_STEPS} step after onset",
+                ],
+                "pre_onset_steps": "negative",
+                "fully_aligned_steps": "negative",
+                "later_drift_steps": "excluded from training loss and step metrics",
             },
         },
         "threshold_selection": {
