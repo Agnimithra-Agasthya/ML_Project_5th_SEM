@@ -1,0 +1,4 @@
+torch>=2.7,<3
+scikit-learn>=1.6,<2
+pyarrow>=18
+huggingface_hub>=0.25
