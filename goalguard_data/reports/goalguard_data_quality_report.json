@@ -1,0 +1,26 @@
+{
+  "dataset": "GoalGuard",
+  "generated_at": "2026-11-02T15:01:18.945568+00:00",
+  "exact_duplicate_records_removed": {
+    "agentic_redteam_gold": 0,
+    "agent_misalignment": 0,
+    "agent_failure_bench_train": 0
+  },
+  "normalized_record_count": 42061,
+  "by_dataset": {
+    "agentic_redteam_gold": 3574,
+    "agent_misalignment": 17399,
+    "agent_failure_bench_train": 21088
+  },
+  "by_label_status": {
+    "approved_goalguard_reviewed": 3574,
+    "trajectory_level_only": 16912,
+    "uncertain_or_unreviewed": 487,
+    "excluded_from_training": 21088
+  },
+  "by_drift_label": {
+    "0": 2233,
+    "1": 1341,
+    "None": 38487
+  }
+}

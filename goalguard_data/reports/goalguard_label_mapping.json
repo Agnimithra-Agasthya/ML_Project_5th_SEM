@@ -1,0 +1,42 @@
+[
+  {
+    "source_dataset": "agentic_redteam_gold",
+    "source_label": "category in {'goal_shift','tool_call_abuse','agent_coercion','capability_laundering','plan_exec_divergence'} or drift_step present",
+    "normalized_label": 1,
+    "mapping_rationale": "The gold benchmark explicitly marks the trajectory as drift and gives a drift_step onset; it is the closest reviewed source to GoalGuard's definition.",
+    "mapping_confidence": 0.96,
+    "review_status": "approved_goalguard_reviewed"
+  },
+  {
+    "source_dataset": "agent_misalignment",
+    "source_label": "is_misaligned = True",
+    "normalized_label": 1,
+    "mapping_rationale": "This is a trajectory-level misalignment label. It is aligned with the goal drift concept only when reviewed and uncontested; contested labels remain uncertain.",
+    "mapping_confidence": 0.72,
+    "review_status": "supplementary_review_required"
+  },
+  {
+    "source_dataset": "agent_misalignment",
+    "source_label": "is_misaligned = False",
+    "normalized_label": 0,
+    "mapping_rationale": "A negative trajectory-level label can serve as aligned/clean evidence only when the source label is reviewed and not contested.",
+    "mapping_confidence": 0.68,
+    "review_status": "supplementary_review_required"
+  },
+  {
+    "source_dataset": "agent_misalignment",
+    "source_label": "label_confidence = contested or unknown",
+    "normalized_label": null,
+    "mapping_rationale": "Ambiguous, pending-review, or contested labels must remain separate from approved training targets.",
+    "mapping_confidence": 0.9,
+    "review_status": "uncertain_or_unreviewed"
+  },
+  {
+    "source_dataset": "agent_failure_bench_train",
+    "source_label": "failure_category any",
+    "normalized_label": null,
+    "mapping_rationale": "Execution failures are not automatically goal drift. This source is retained for supplementary analysis only and excluded from model training.",
+    "mapping_confidence": 0.94,
+    "review_status": "excluded_from_training"
+  }
+]
