@@ -1,0 +1,215 @@
+{
+  "model_version": "goalguard-tfidf-logreg-v1",
+  "model_type": "TF-IDF word n-grams + class-weighted logistic regression",
+  "training_scope": "agentic_redteam_gold only; source-provided gold-tier onset labels",
+  "feature_policy": {
+    "uses": [
+      "original_goal",
+      "actions and tool calls through the current step",
+      "tool arguments through the current step",
+      "observations through the current step",
+      "step number"
+    ],
+    "excludes": [
+      "source_metadata",
+      "ground_truth",
+      "judge/evaluator explanations",
+      "future steps",
+      "drift_onset_step",
+      "label_mapping_rationale",
+      "source_original_label"
+    ]
+  },
+  "split_trajectory_counts": {
+    "train": 359,
+    "validation": 77,
+    "test": 77
+  },
+  "split_distributions": {
+    "train": {
+      "rows": 2499,
+      "trajectories": 359,
+      "sources_by_trajectory": {
+        "agentic_redteam_gold": 359
+      },
+      "categories_by_trajectory": {
+        "agent_coercion": 70,
+        "capability_laundering": 70,
+        "goal_shift": 70,
+        "plan_exec_divergence": 73,
+        "tool_call_abuse": 76
+      },
+      "steps_per_trajectory": {
+        "6": 150,
+        "7": 113,
+        "8": 68,
+        "9": 17,
+        "10": 10,
+        "11": 1
+      },
+      "labels": {
+        "0": 1558,
+        "1": 941
+      }
+    },
+    "validation": {
+      "rows": 540,
+      "trajectories": 77,
+      "sources_by_trajectory": {
+        "agentic_redteam_gold": 77
+      },
+      "categories_by_trajectory": {
+        "agent_coercion": 15,
+        "capability_laundering": 15,
+        "goal_shift": 15,
+        "plan_exec_divergence": 16,
+        "tool_call_abuse": 16
+      },
+      "steps_per_trajectory": {
+        "6": 27,
+        "7": 30,
+        "8": 14,
+        "9": 5,
+        "11": 1
+      },
+      "labels": {
+        "0": 344,
+        "1": 196
+      }
+    },
+    "test": {
+      "rows": 535,
+      "trajectories": 77,
+      "sources_by_trajectory": {
+        "agentic_redteam_gold": 77
+      },
+      "categories_by_trajectory": {
+        "agent_coercion": 15,
+        "capability_laundering": 15,
+        "goal_shift": 15,
+        "plan_exec_divergence": 16,
+        "tool_call_abuse": 16
+      },
+      "steps_per_trajectory": {
+        "6": 33,
+        "7": 23,
+        "8": 16,
+        "9": 2,
+        "10": 3
+      },
+      "labels": {
+        "0": 331,
+        "1": 204
+      }
+    }
+  },
+  "threshold_selection": {
+    "split": "validation",
+    "objective": "maximum step-level F1; highest threshold selected on ties",
+    "selected_threshold": 0.5438485248194496
+  },
+  "validation": {
+    "step_metrics": {
+      "threshold": 0.5438485248194496,
+      "rows": 540,
+      "positive_steps": 196,
+      "negative_steps": 344,
+      "positive_rate": 0.362962962962963,
+      "accuracy": 0.8981481481481481,
+      "precision": 0.8439024390243902,
+      "recall": 0.8826530612244898,
+      "f1": 0.8628428927680798,
+      "confusion_matrix": {
+        "tn": 312,
+        "fp": 32,
+        "fn": 23,
+        "tp": 173
+      },
+      "false_positive_rate": 0.09302325581395349,
+      "false_negative_rate": 0.11734693877551021,
+      "brier_score": 0.1178563889366173,
+      "roc_auc": 0.9645823445657333,
+      "average_precision": 0.9420762930872244
+    },
+    "temporal_metrics": {
+      "drift_trajectories_with_onset": 77,
+      "detected_at_or_after_onset": 56,
+      "missed_trajectories": 1,
+      "trajectories_with_pre_onset_alarm": 20,
+      "detection_recall_at_trajectory_level": 0.7272727272727273,
+      "median_detection_delay_steps": 0.0,
+      "note": "All benchmark trajectories are drift-positive; trajectory-level false-alarm rate cannot be estimated from this source."
+    }
+  },
+  "test": {
+    "step_metrics": {
+      "threshold": 0.5438485248194496,
+      "rows": 535,
+      "positive_steps": 204,
+      "negative_steps": 331,
+      "positive_rate": 0.3813084112149533,
+      "accuracy": 0.9177570093457944,
+      "precision": 0.8960396039603961,
+      "recall": 0.8872549019607843,
+      "f1": 0.8916256157635468,
+      "confusion_matrix": {
+        "tn": 310,
+        "fp": 21,
+        "fn": 23,
+        "tp": 181
+      },
+      "false_positive_rate": 0.0634441087613293,
+      "false_negative_rate": 0.11274509803921569,
+      "brier_score": 0.11253305038906138,
+      "roc_auc": 0.9692553758663587,
+      "average_precision": 0.9525123193740873
+    },
+    "temporal_metrics": {
+      "drift_trajectories_with_onset": 77,
+      "detected_at_or_after_onset": 59,
+      "missed_trajectories": 0,
+      "trajectories_with_pre_onset_alarm": 18,
+      "detection_recall_at_trajectory_level": 0.7662337662337663,
+      "median_detection_delay_steps": 0.0,
+      "note": "All benchmark trajectories are drift-positive; trajectory-level false-alarm rate cannot be estimated from this source."
+    }
+  },
+  "time_only_baseline": {
+    "validation_threshold": 0.7119157751409633,
+    "test_step_metrics": {
+      "threshold": 0.7119157751409633,
+      "rows": 535,
+      "positive_steps": 204,
+      "negative_steps": 331,
+      "positive_rate": 0.3813084112149533,
+      "accuracy": 0.9570093457943926,
+      "precision": 0.8986784140969163,
+      "recall": 1.0,
+      "f1": 0.9466357308584686,
+      "confusion_matrix": {
+        "tn": 308,
+        "fp": 23,
+        "fn": 0,
+        "tp": 204
+      },
+      "false_positive_rate": 0.06948640483383686,
+      "false_negative_rate": 0.0,
+      "brier_score": 0.04282331511351272,
+      "roc_auc": 0.9787482969018423,
+      "average_precision": 0.9424806625323473
+    }
+  },
+  "baseline_comparison": {
+    "test_f1_text_minus_time_only": -0.05501011509492182,
+    "interpretation": "The step-number-only ablation outperforms text/history features on this test split. This is consistent with the onset-derived labels making step position a strong shortcut; high scores should not be read as proof of semantic goal understanding."
+  },
+  "model_artifact": "D:\\Projects\\ML_Project\\goalguard_data\\models\\goalguard_baseline.joblib",
+  "limitations": [
+    "The supervised data is one synthetic adversarial benchmark, not a representative sample of deployed agent behavior.",
+    "The source reports tier=gold but has no non-empty reviewed_by metadata; GoalGuard has not independently reviewed these annotations.",
+    "All trajectories in this source have a labeled drift onset, so trajectory-level false-alarm rates are not measurable.",
+    "The labels are onset-derived; step-level annotation quality and benchmark review depth need independent verification.",
+    "Confidence is not calibrated; threshold is validation-selected and is not an intervention policy.",
+    "Exact duplicates are grouped during splitting, but near-duplicate scenario variants may still occur across splits."
+  ]
+}

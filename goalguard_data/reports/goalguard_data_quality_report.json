@@ -1,6 +1,6 @@
 {
   "dataset": "GoalGuard",
-  "generated_at": "2026-11-02T15:01:18.945568+00:00",
+  "generated_at": "2026-11-03T03:03:39.283211+00:00",
   "exact_duplicate_records_removed": {
     "agentic_redteam_gold": 0,
     "agent_misalignment": 0,
@@ -13,7 +13,7 @@
     "agent_failure_bench_train": 21088
   },
   "by_label_status": {
-    "approved_goalguard_reviewed": 3574,
+    "source_gold_onset_labeled": 3574,
     "trajectory_level_only": 16912,
     "uncertain_or_unreviewed": 487,
     "excluded_from_training": 21088

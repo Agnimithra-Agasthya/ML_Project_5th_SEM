@@ -3,25 +3,25 @@
     "source_dataset": "agentic_redteam_gold",
     "source_label": "category in {'goal_shift','tool_call_abuse','agent_coercion','capability_laundering','plan_exec_divergence'} or drift_step present",
     "normalized_label": 1,
-    "mapping_rationale": "The gold benchmark explicitly marks the trajectory as drift and gives a drift_step onset; it is the closest reviewed source to GoalGuard's definition.",
-    "mapping_confidence": 0.96,
-    "review_status": "approved_goalguard_reviewed"
+    "mapping_rationale": "The source has tier=gold and an explicit drift_step, so it can provide a provisional onset target. The supplied metadata has no non-empty reviewed_by entries; GoalGuard has not independently reviewed these annotations.",
+    "mapping_confidence": 0.9,
+    "review_status": "source_gold_onset_labeled; independent_review_not_present"
   },
   {
     "source_dataset": "agent_misalignment",
     "source_label": "is_misaligned = True",
-    "normalized_label": 1,
-    "mapping_rationale": "This is a trajectory-level misalignment label. It is aligned with the goal drift concept only when reviewed and uncontested; contested labels remain uncertain.",
+    "normalized_label": null,
+    "mapping_rationale": "This is a trajectory-level misalignment label without a validated drift onset. It is preserved in source metadata and is not converted into step labels.",
     "mapping_confidence": 0.72,
-    "review_status": "supplementary_review_required"
+    "review_status": "trajectory_level_only"
   },
   {
     "source_dataset": "agent_misalignment",
     "source_label": "is_misaligned = False",
-    "normalized_label": 0,
-    "mapping_rationale": "A negative trajectory-level label can serve as aligned/clean evidence only when the source label is reviewed and not contested.",
+    "normalized_label": null,
+    "mapping_rationale": "A trajectory-level negative does not identify which steps were aligned and cannot establish step-level labels.",
     "mapping_confidence": 0.68,
-    "review_status": "supplementary_review_required"
+    "review_status": "trajectory_level_only"
   },
   {
     "source_dataset": "agent_misalignment",

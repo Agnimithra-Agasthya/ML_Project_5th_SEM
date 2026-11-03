@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import math
 import random
 from collections import Counter, defaultdict
 from copy import deepcopy
@@ -57,6 +56,17 @@ GOALGUARD_POLICY = {
         1: "goal_drift",
         "null": "uncertain_or_unreviewed",
     },
+    "source_review_note": (
+        "The available Agentic Red-Team Gold file has tier=gold and explicit drift_step labels, "
+        "but its metadata has no non-empty reviewed_by entries. These labels are source-provided "
+        "and have not been independently reviewed by GoalGuard."
+    ),
+    "mapping_rules": [
+        "Use source-provided explicit drift_step labels only as a provisional step-level target.",
+        "Do not propagate trajectory-level labels without a validated onset.",
+        "Do not treat execution failure categories as goal drift.",
+        "Keep contested, unknown, and unreviewed labels out of approved binary training targets.",
+    ],
 }
 
 
@@ -264,25 +274,25 @@ def make_label_mapping() -> list[dict[str, Any]]:
             "source_dataset": "agentic_redteam_gold",
             "source_label": "category in {'goal_shift','tool_call_abuse','agent_coercion','capability_laundering','plan_exec_divergence'} or drift_step present",
             "normalized_label": 1,
-            "mapping_rationale": "The gold benchmark explicitly marks the trajectory as drift and gives a drift_step onset; it is the closest reviewed source to GoalGuard's definition.",
-            "mapping_confidence": 0.96,
-            "review_status": "approved_goalguard_reviewed",
+            "mapping_rationale": "The source has tier=gold and an explicit drift_step, so it can provide a provisional onset target. The supplied metadata has no non-empty reviewed_by entries; GoalGuard has not independently reviewed these annotations.",
+            "mapping_confidence": 0.9,
+            "review_status": "source_gold_onset_labeled; independent_review_not_present",
         },
         {
             "source_dataset": "agent_misalignment",
             "source_label": "is_misaligned = True",
-            "normalized_label": 1,
-            "mapping_rationale": "This is a trajectory-level misalignment label. It is aligned with the goal drift concept only when reviewed and uncontested; contested labels remain uncertain.",
+            "normalized_label": None,
+            "mapping_rationale": "This is a trajectory-level misalignment label without a validated drift onset. It is preserved in source metadata and is not converted into step labels.",
             "mapping_confidence": 0.72,
-            "review_status": "supplementary_review_required",
+            "review_status": "trajectory_level_only",
         },
         {
             "source_dataset": "agent_misalignment",
             "source_label": "is_misaligned = False",
-            "normalized_label": 0,
-            "mapping_rationale": "A negative trajectory-level label can serve as aligned/clean evidence only when the source label is reviewed and not contested.",
+            "normalized_label": None,
+            "mapping_rationale": "A trajectory-level negative does not identify which steps were aligned and cannot establish step-level labels.",
             "mapping_confidence": 0.68,
-            "review_status": "supplementary_review_required",
+            "review_status": "trajectory_level_only",
         },
         {
             "source_dataset": "agent_misalignment",
@@ -350,9 +360,9 @@ def normalize_gold_transitions(rows: list[dict[str, Any]]) -> list[dict[str, Any
                 "previous_action": prev_action,
                 "drift_label": drift_label,
                 "drift_onset_step": drift_step if drift_label == 1 else None,
-                "label_status": "approved_goalguard_reviewed",
+                "label_status": "source_gold_onset_labeled",
                 "label_mapping_rationale": (
-                    "Gold benchmark contains explicit drift onset and rationale; steps at or after drift_step are treated as goal drift, and earlier steps as aligned."
+                    "Source-provided gold-tier benchmark contains an explicit drift onset; steps at or after drift_step are labeled drift and earlier steps aligned. The source metadata has no non-empty reviewed_by entries, so this is not independently GoalGuard-reviewed."
                 ),
                 "source_original_label": str(source_label),
                 "source_metadata": {
@@ -482,6 +492,7 @@ def build_normalized_dataset(output_dir: Path, download: bool = True) -> tuple[l
 
     label_mapping = make_label_mapping()
     write_json(output_dir / "reports" / "goalguard_label_mapping.json", label_mapping)
+    write_json(output_dir / "goalguard_label_policy_v1.json", GOALGUARD_POLICY)
 
     normalized_records: list[dict[str, Any]] = []
     normalized_records.extend(normalize_gold_transitions(source_rows.get("agentic_redteam_gold", [])))
@@ -580,37 +591,67 @@ def split_trajectories(records: list[dict[str, Any]], random_seed: int = 42) -> 
     for record in records:
         trajectories[record["trajectory_id"]].append(record)
 
-    all_ids = sorted(trajectories.keys())
     rng = random.Random(random_seed)
-    rng.shuffle(all_ids)
 
-    positive_ids = [tid for tid in all_ids if any(r.get("drift_label") == 1 for r in trajectories[tid])]
-    negative_ids = [tid for tid in all_ids if tid not in set(positive_ids)]
+    fingerprints: dict[str, list[str]] = defaultdict(list)
+    for trajectory_id, rows in trajectories.items():
+        ordered = sorted(rows, key=lambda row: row["step_number"])
+        fingerprint_data = [
+            {
+                key: row.get(key)
+                for key in (
+                    "original_goal",
+                    "step_number",
+                    "agent_action",
+                    "action_type",
+                    "tool_name",
+                    "tool_arguments",
+                    "observation",
+                )
+            }
+            for row in ordered
+        ]
+        fingerprints[stable_hash(fingerprint_data)].append(trajectory_id)
 
-    def assign_group(ids: list[str], train_frac: float, val_frac: float) -> tuple[set[str], set[str], set[str]]:
-        train_count = max(1, math.floor(len(ids) * train_frac))
-        val_count = max(1, math.floor(len(ids) * val_frac))
-        if train_count + val_count >= len(ids):
-            train_count = max(1, len(ids) - val_count)
-        train_ids = set(ids[:train_count])
-        rem = ids[train_count:]
-        val_ids = set(rem[:val_count])
-        test_ids = set(rem[val_count:])
-        return train_ids, val_ids, test_ids
+    strata: dict[tuple[str, str], list[list[str]]] = defaultdict(list)
+    for ids in fingerprints.values():
+        representative = trajectories[ids[0]][0]
+        category = representative.get("source_metadata", {}).get("category", "unknown")
+        stratum = (representative["source_dataset"], str(category))
+        strata[stratum].append(sorted(ids))
 
-    pos_train, pos_val, pos_test = assign_group(positive_ids, 0.70, 0.15)
-    neg_train, neg_val, neg_test = assign_group(negative_ids, 0.70, 0.15)
+    assigned: dict[str, set[str]] = {
+        "train": set(),
+        "validation": set(),
+        "test": set(),
+    }
+    fractions = {"train": 0.70, "validation": 0.15, "test": 0.15}
+    for clusters in strata.values():
+        rng.shuffle(clusters)
+        targets = {
+            split: sum(len(cluster) for cluster in clusters) * fraction
+            for split, fraction in fractions.items()
+        }
+        counts = {split: 0 for split in fractions}
+        for cluster in sorted(clusters, key=len, reverse=True):
+            split = max(fractions, key=lambda name: (targets[name] - counts[name], rng.random()))
+            assigned[split].update(cluster)
+            counts[split] += len(cluster)
 
-    train = pos_train | neg_train
-    validation = pos_val | neg_val
-    test = pos_test | neg_test
+    train = assigned["train"]
+    validation = assigned["validation"]
+    test = assigned["test"]
 
     # Ensure no overlap by construction.
     assert train.isdisjoint(validation)
     assert train.isdisjoint(test)
     assert validation.isdisjoint(test)
 
+    duplicate_cluster_count = sum(len(ids) > 1 for ids in fingerprints.values())
     return {
+        "seed": random_seed,
+        "target_fractions": fractions,
+        "exact_duplicate_trajectory_clusters": duplicate_cluster_count,
         "train": {"count": len(train), "trajectory_ids": sorted(train)},
         "validation": {"count": len(validation), "trajectory_ids": sorted(validation)},
         "test": {"count": len(test), "trajectory_ids": sorted(test)},
@@ -627,6 +668,7 @@ def copy_to_root(output_dir: Path) -> None:
         "goalguard_test.jsonl",
         "goalguard_dataset_manifest.json",
         "goalguard_label_mapping.json",
+        "goalguard_label_policy_v1.json",
         "goalguard_data_quality_report.json",
     ):
         src = output_dir / name
