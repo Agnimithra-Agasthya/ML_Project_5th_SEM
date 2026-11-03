@@ -1,4 +1,16 @@
 __pycache__/
-goalguard_data/raw/agentic_redteam_augmented/
+goalguard_data/raw/
 goalguard_data/gru_experiment/
 goalguard_data/local_gru_experiment/
+
+# Regenerable normalized archive; intentionally kept local instead of in Git.
+/goalguard_data/goalguard_normalized_all.jsonl
+/goalguard_normalized_all.jsonl
+
+# Stale root-level copies of generated dataset outputs (canonical outputs are under goalguard_data/).
+/goalguard_approved_labeled.jsonl
+/goalguard_dataset_manifest.json
+/goalguard_label_policy_v1.json
+/goalguard_test.jsonl
+/goalguard_train.jsonl
+/goalguard_validation.jsonl
