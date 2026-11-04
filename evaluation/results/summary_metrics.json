@@ -1,0 +1,69 @@
+{
+  "models_evaluated": [
+    "Semantic_Baseline_TFIDF",
+    "Behavioral_Baseline_ActionSchema",
+    "StepNumber_Shortcut_Ablation"
+  ],
+  "test_step_metrics": {
+    "Semantic_Baseline_TFIDF": {
+      "threshold": 0.5438485248194496,
+      "accuracy": 0.9177570093457944,
+      "precision": 0.8960396039603961,
+      "recall": 0.8872549019607843,
+      "f1": 0.8916256157635468,
+      "roc_auc": 0.9692553758663587,
+      "pr_auc": 0.9525123193740873
+    },
+    "Behavioral_Baseline_ActionSchema": {
+      "threshold": 0.4483597492422505,
+      "accuracy": 0.9588785046728971,
+      "precision": 0.9212962962962963,
+      "recall": 0.9754901960784313,
+      "f1": 0.9476190476190476,
+      "roc_auc": 0.9908476985960547,
+      "pr_auc": 0.9833695611565691
+    },
+    "StepNumber_Shortcut_Ablation": {
+      "threshold": 0.9525741268224334,
+      "accuracy": 0.8654205607476636,
+      "precision": 0.94,
+      "recall": 0.6911764705882353,
+      "f1": 0.7966101694915254,
+      "roc_auc": 0.9787482969018423,
+      "pr_auc": 0.9424806625323473
+    }
+  },
+  "temporal_metrics": {
+    "Semantic_Baseline_TFIDF": {
+      "trajectory_recall": 1.0,
+      "window_recall_with_tolerance": 0.7012987012987013,
+      "early_detection_rate": 0.7662337662337663,
+      "pre_onset_alarm_rate": 0.23376623376623376,
+      "median_delay_steps": 0.0
+    },
+    "Behavioral_Baseline_ActionSchema": {
+      "trajectory_recall": 1.0,
+      "window_recall_with_tolerance": 0.8311688311688312,
+      "early_detection_rate": 0.935064935064935,
+      "pre_onset_alarm_rate": 0.16883116883116883,
+      "median_delay_steps": 0.0
+    },
+    "StepNumber_Shortcut_Ablation": {
+      "trajectory_recall": 1.0,
+      "window_recall_with_tolerance": 0.9090909090909091,
+      "early_detection_rate": 0.18181818181818182,
+      "pre_onset_alarm_rate": 0.09090909090909091,
+      "median_delay_steps": 1.0
+    }
+  },
+  "robustness_pass_rates": {
+    "Semantic_Baseline_TFIDF": 0.5,
+    "Behavioral_Baseline_ActionSchema": 0.5,
+    "StepNumber_Shortcut_Ablation": 0.5
+  },
+  "shortcut_susceptibility": {
+    "Semantic_Baseline_TFIDF": "LOW / RESILIENT (tracks true attack despite padding)",
+    "Behavioral_Baseline_ActionSchema": "LOW / RESILIENT (tracks true attack despite padding)",
+    "StepNumber_Shortcut_Ablation": "LOW / RESILIENT (tracks true attack despite padding)"
+  }
+}

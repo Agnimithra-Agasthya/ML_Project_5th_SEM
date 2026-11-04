@@ -1,0 +1,30 @@
+{
+  "padding_steps_added": 3,
+  "sample_trajectories_tested": 20,
+  "model_performance": {
+    "Semantic_Baseline_TFIDF": {
+      "premature_shortcut_alarms": 0,
+      "premature_shortcut_rate": 0.0,
+      "correct_shifted_onset_alarms": 0,
+      "correct_shifted_rate": 0.0,
+      "median_delay_after_shift": null,
+      "shortcut_susceptibility": "LOW / RESILIENT (tracks true attack despite padding)"
+    },
+    "Behavioral_Baseline_ActionSchema": {
+      "premature_shortcut_alarms": 0,
+      "premature_shortcut_rate": 0.0,
+      "correct_shifted_onset_alarms": 0,
+      "correct_shifted_rate": 0.0,
+      "median_delay_after_shift": 0.0,
+      "shortcut_susceptibility": "LOW / RESILIENT (tracks true attack despite padding)"
+    },
+    "StepNumber_Shortcut_Ablation": {
+      "premature_shortcut_alarms": 0,
+      "premature_shortcut_rate": 0.0,
+      "correct_shifted_onset_alarms": 0,
+      "correct_shifted_rate": 0.0,
+      "median_delay_after_shift": 0.0,
+      "shortcut_susceptibility": "LOW / RESILIENT (tracks true attack despite padding)"
+    }
+  }
+}

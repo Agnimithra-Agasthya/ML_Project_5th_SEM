@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-11-04T05:21:56Z",
+  "duration_seconds": 28.455,
+  "total_tests_run": 27,
+  "passed": 27,
+  "failed": 0,
+  "errors": 0,
+  "skipped": 0,
+  "failures_detail": [],
+  "errors_detail": [],
+  "original_root_tests": {
+    "test_goalguard_local_agent.py": "BLOCKED: Requires langgraph (not installed in base Python)",
+    "test_train_goalguard_gru.py": "BLOCKED: Requires torch (not installed in base Python)",
+    "test_train_goalguard_local_gru.py": "BLOCKED: Requires torch (not installed in base Python)"
+  },
+  "verdict": "PASSED"
+}
