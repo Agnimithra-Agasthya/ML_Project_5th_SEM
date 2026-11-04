@@ -41,5 +41,3 @@ The project investigates:
 To investigate whether understanding how an AI agent behaves over time can help identify when it moves away from its intended goal.
 
 ---
-
-*An exploration of safer and more reliable autonomous AI agents.*
