@@ -115,6 +115,7 @@ def run_padded_prefix_test(
     for m in models:
         premature_alarms_at_old_step = 0
         correct_shifted_alarms = 0
+        window_shifted_alarms = 0
         delays_relative_to_shifted: list[int] = []
 
         for traj in candidates:
@@ -140,6 +141,8 @@ def run_padded_prefix_test(
                     premature_alarms_at_old_step += 1
                 elif shifted_onset is not None and alarm_step == shifted_onset:
                     correct_shifted_alarms += 1
+                if shifted_onset is not None and 0 <= delay <= 1:
+                    window_shifted_alarms += 1
 
         total = len(candidates)
         results["model_performance"][m.name] = {
@@ -147,15 +150,30 @@ def run_padded_prefix_test(
             "premature_shortcut_rate": float(premature_alarms_at_old_step / total) if total else 0.0,
             "correct_shifted_onset_alarms": correct_shifted_alarms,
             "correct_shifted_rate": float(correct_shifted_alarms / total) if total else 0.0,
+            "shifted_window_alarms_with_tolerance": window_shifted_alarms,
+            "shifted_window_rate_with_tolerance": (
+                float(window_shifted_alarms / total) if total else 0.0
+            ),
             "median_delay_after_shift": (
                 float(np.median(delays_relative_to_shifted)) if delays_relative_to_shifted else None
             ),
             "shortcut_susceptibility": (
                 "HIGH (triggers on step position rather than true attack)"
-                if premature_alarms_at_old_step > total * 0.4
-                else "LOW / RESILIENT (tracks true attack despite padding)"
+                if total and premature_alarms_at_old_step / total >= 0.4
+                else (
+                    "MIXED (premature alarms and shifted-onset detections)"
+                    if premature_alarms_at_old_step
+                    and total
+                    and window_shifted_alarms / total >= 0.6
+                    else (
+                        "LOW / RESILIENT (detects shifted onset within tolerance)"
+                        if total
+                        and premature_alarms_at_old_step == 0
+                        and window_shifted_alarms / total >= 0.6
+                        else "INCONCLUSIVE (insufficient shifted-onset detections)"
+                    )
+                )
             ),
         }
 
     return results
-

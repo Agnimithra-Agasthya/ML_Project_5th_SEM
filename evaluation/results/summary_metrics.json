@@ -2,8 +2,15 @@
   "models_evaluated": [
     "Semantic_Baseline_TFIDF",
     "Behavioral_Baseline_ActionSchema",
-    "StepNumber_Shortcut_Ablation"
+    "StepNumber_Shortcut_Ablation",
+    "Temporal_ML_GoalDriftGRU"
   ],
+  "evaluation_protocol": {
+    "threshold_calibration": "per-model validation split; max F1 with FPR <= 0.10",
+    "gru_checkpoint": "gru_experiment\\goalguard_gru.pt",
+    "gru_checkpoint_base": "data_dir",
+    "gru_training_split_protocol": "goalguard_jsonl_seed_family_v1"
+  },
   "test_step_metrics": {
     "Semantic_Baseline_TFIDF": {
       "threshold": 0.5438485248194496,
@@ -15,22 +22,31 @@
       "pr_auc": 0.9525123193740873
     },
     "Behavioral_Baseline_ActionSchema": {
-      "threshold": 0.4483597492422505,
+      "threshold": 0.4487358601565678,
       "accuracy": 0.9588785046728971,
       "precision": 0.9212962962962963,
       "recall": 0.9754901960784313,
       "f1": 0.9476190476190476,
-      "roc_auc": 0.9908476985960547,
-      "pr_auc": 0.9833695611565691
+      "roc_auc": 0.9907736508500681,
+      "pr_auc": 0.9832303121237758
     },
     "StepNumber_Shortcut_Ablation": {
-      "threshold": 0.9525741268224334,
+      "threshold": 0.9701223387771739,
       "accuracy": 0.8654205607476636,
       "precision": 0.94,
       "recall": 0.6911764705882353,
       "f1": 0.7966101694915254,
       "roc_auc": 0.9787482969018423,
       "pr_auc": 0.9424806625323473
+    },
+    "Temporal_ML_GoalDriftGRU": {
+      "threshold": 0.9147694706916809,
+      "accuracy": 0.9532710280373832,
+      "precision": 0.9365853658536586,
+      "recall": 0.9411764705882353,
+      "f1": 0.9388753056234719,
+      "roc_auc": 0.9894556009715064,
+      "pr_auc": 0.9788536599489605
     }
   },
   "temporal_metrics": {
@@ -54,16 +70,25 @@
       "early_detection_rate": 0.18181818181818182,
       "pre_onset_alarm_rate": 0.09090909090909091,
       "median_delay_steps": 1.0
+    },
+    "Temporal_ML_GoalDriftGRU": {
+      "trajectory_recall": 0.961038961038961,
+      "window_recall_with_tolerance": 0.8311688311688312,
+      "early_detection_rate": 0.8701298701298701,
+      "pre_onset_alarm_rate": 0.12987012987012986,
+      "median_delay_steps": 0.0
     }
   },
   "robustness_pass_rates": {
     "Semantic_Baseline_TFIDF": 0.5,
     "Behavioral_Baseline_ActionSchema": 0.5,
-    "StepNumber_Shortcut_Ablation": 0.5
+    "StepNumber_Shortcut_Ablation": 0.5,
+    "Temporal_ML_GoalDriftGRU": 0.5
   },
   "shortcut_susceptibility": {
-    "Semantic_Baseline_TFIDF": "LOW / RESILIENT (tracks true attack despite padding)",
-    "Behavioral_Baseline_ActionSchema": "LOW / RESILIENT (tracks true attack despite padding)",
-    "StepNumber_Shortcut_Ablation": "LOW / RESILIENT (tracks true attack despite padding)"
+    "Semantic_Baseline_TFIDF": "MIXED (premature alarms and shifted-onset detections)",
+    "Behavioral_Baseline_ActionSchema": "HIGH (triggers on step position rather than true attack)",
+    "StepNumber_Shortcut_Ablation": "HIGH (triggers on step position rather than true attack)",
+    "Temporal_ML_GoalDriftGRU": "HIGH (triggers on step position rather than true attack)"
   }
 }

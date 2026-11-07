@@ -70,7 +70,12 @@ class TestRegressionReproducibility(unittest.TestCase):
         coef_2 = det_2.pipeline.named_steps["classifier"].coef_
         np.testing.assert_array_almost_equal(coef_1, coef_2)
 
+    def test_time_only_baseline_is_trained_on_training_split(self) -> None:
+        framework = ComparisonFramework(self.data_dir)
+        classifier = framework.train_time_only_baseline()
+        self.assertEqual(classifier.n_features_in_, 1)
+        self.assertEqual(len(classifier.classes_), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
-

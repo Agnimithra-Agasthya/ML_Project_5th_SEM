@@ -57,6 +57,15 @@ class TestIntegrationPipeline(unittest.TestCase):
             summary = run_full_evaluation(self.data_dir, tmp_path)
 
             self.assertIn("models_evaluated", summary)
+            self.assertEqual(
+                set(summary["models_evaluated"]),
+                {
+                    "Semantic_Baseline_TFIDF",
+                    "Behavioral_Baseline_ActionSchema",
+                    "StepNumber_Shortcut_Ablation",
+                    "Temporal_ML_GoalDriftGRU",
+                },
+            )
             self.assertTrue((tmp_path / "summary_metrics.json").is_file())
             self.assertTrue((tmp_path / "benchmark_comparison.json").is_file())
             self.assertTrue((tmp_path / "robustness_report.json").is_file())
@@ -68,4 +77,3 @@ class TestIntegrationPipeline(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

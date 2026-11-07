@@ -228,6 +228,7 @@ class TemporalGRUWrapper(BaseDriftWrapper):
                 threshold=self.threshold,
             )
             return float(scores[-1]["drift_probability"])
-        except Exception:
-            return 0.0
-
+        except Exception as exc:
+            raise RuntimeError(
+                f"GRU inference failed for checkpoint {self.checkpoint_path}: {exc}"
+            ) from exc

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 import numpy as np
+from sklearn.linear_model import LogisticRegression
 
 from evaluation.baselines.behavioral_baseline import (
     BehavioralDriftDetector,
@@ -125,6 +126,27 @@ class ComparisonFramework:
         detector.fit(feature_dicts, np.asarray(labels, dtype=np.int64))
         return detector
 
+    def train_time_only_baseline(self) -> LogisticRegression:
+        """Fits a step-number-only classifier using the training split."""
+        features = np.asarray(
+            [[int(record.get("step_number", 0))] for record in self.train_records],
+            dtype=np.int64,
+        )
+        labels = np.asarray(
+            [int(record.get("drift_label", 0)) for record in self.train_records],
+            dtype=np.int64,
+        )
+        if len(np.unique(labels)) < 2:
+            raise ValueError("Training split must contain both drift-label classes")
+        classifier = LogisticRegression(
+            class_weight="balanced",
+            max_iter=1_000,
+            random_state=42,
+            solver="liblinear",
+        )
+        classifier.fit(features, labels)
+        return classifier
+
     def evaluate_model_on_split(
         self,
         model: BaseDriftWrapper,
@@ -217,4 +239,3 @@ class ComparisonFramework:
             comparison_results["error_analysis"][m.name] = errors
 
         return comparison_results
-

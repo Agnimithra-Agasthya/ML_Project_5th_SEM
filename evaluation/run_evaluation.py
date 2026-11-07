@@ -4,7 +4,7 @@ Main Evaluation Runner for Goal Drift Detection.
 Executes Phases 1 through 8:
 - Phase 1: Validates existing artifacts and environment.
 - Phase 2: Fits the Behavioral ML Baseline on the training split.
-- Phase 3: Wraps Semantic, Behavioral, Temporal (if torch present), and Shortcut baselines.
+- Phase 3: Wraps Semantic, Behavioral, benchmark GRU, and trained Step-Number baselines.
 - Phase 4: Calibrates thresholds on Validation; evaluates on Test split.
 - Phase 5: Runs temporal event metrics (delays, TTD, early alarms, window recall).
 - Phase 6: Runs robustness stress tests (sudden vs gradual drift, goal revisions, padded prefix).
@@ -12,6 +12,7 @@ Executes Phases 1 through 8:
 - Phase 8: Exports JSON metrics and publication-quality plots to evaluation/results/.
 
 Usage:
+  python train_goalguard_gru.py --data-dir goalguard_data --evaluation-split-dir goalguard_data
   python evaluation/run_evaluation.py --data-dir goalguard_data --results-dir evaluation/results
 """
 
@@ -36,7 +37,7 @@ from evaluation.baselines.wrappers import (
     TimeOnlyShortcutWrapper,
     TemporalGRUWrapper,
 )
-from evaluation.core.comparison_framework import ComparisonFramework
+from evaluation.core.comparison_framework import ComparisonFramework, group_trajectories
 from evaluation.robustness.drift_patterns import run_robustness_suite
 from evaluation.robustness.shortcut_testing import run_padded_prefix_test
 from evaluation.visualization.plot_generator import (
@@ -84,18 +85,34 @@ def run_full_evaluation(
     semantic_model_path = data_dir / "models" / "goalguard_baseline.joblib"
     semantic_wrapper = SemanticDriftWrapper(semantic_model_path)
     behavioral_wrapper = BehavioralDriftWrapper(behavioral_detector)
-    shortcut_wrapper = TimeOnlyShortcutWrapper()
+    shortcut_wrapper = TimeOnlyShortcutWrapper(
+        classifier=framework.train_time_only_baseline()
+    )
 
-    # Check temporal GRU checkpoint availability
-    gru_checkpoint = data_dir / "local_gru_experiment" / "goalguard_local_gru.pt"
+    # Benchmark results must use a checkpoint trained on the same isolated
+    # dataset partitions; the local-agent GRU is a separate domain experiment.
+    gru_checkpoint = data_dir / "gru_experiment" / "goalguard_gru.pt"
     if not gru_checkpoint.is_file():
-        gru_checkpoint = data_dir / "gru_experiment" / "goalguard_gru.pt"
-
-    temporal_wrapper = TemporalGRUWrapper(gru_checkpoint if gru_checkpoint.is_file() else None)
+        raise FileNotFoundError(
+            f"Benchmark GRU checkpoint not found: {gru_checkpoint}. "
+            "Train it with train_goalguard_gru.py --evaluation-split-dir "
+            f"{data_dir} before running the four-model comparison."
+        )
+    temporal_wrapper = TemporalGRUWrapper(gru_checkpoint)
     if not temporal_wrapper.is_available:
-        print(f"  [Note on Temporal GRU]: {temporal_wrapper.error_reason}")
-    else:
-        print("  - Temporal GRU model loaded successfully.")
+        raise RuntimeError(
+            f"Benchmark GRU checkpoint could not be loaded: "
+            f"{temporal_wrapper.error_reason}"
+        )
+    if temporal_wrapper.model_config.get("evaluation_split_protocol") != (
+        "goalguard_jsonl_seed_family_v1"
+    ):
+        raise ValueError(
+            "The benchmark GRU checkpoint was not trained with the current "
+            "GoalGuard train/validation/test partitions. Retrain it with "
+            f"--evaluation-split-dir {data_dir} before comparison."
+        )
+    print(f"  - Benchmark GRU model loaded from: {gru_checkpoint}")
 
     # ---------------------------------------------------------
     # 4 & 5. Benchmark Comparison & Temporal Evaluation
@@ -124,7 +141,24 @@ def run_full_evaluation(
     # Shortcut Stress Testing (Padded Prefixes)
     print("  - Running padded-prefix shortcut invariance test...")
     # Get test trajectories from the comparison run
-    _, _, test_trajectories = framework.evaluate_model_on_split(semantic_wrapper, framework.test_records)
+    test_trajectories = []
+    for trajectory_id, steps in group_trajectories(framework.test_records).items():
+        onset = next(
+            (
+                step.get("drift_onset_step")
+                for step in steps
+                if step.get("drift_onset_step") is not None
+            ),
+            None,
+        )
+        test_trajectories.append(
+            {
+                "trajectory_id": trajectory_id,
+                "declared_goal": str(steps[0].get("original_goal") or ""),
+                "onset_step": int(onset) if onset is not None else None,
+                "steps": steps,
+            }
+        )
     shortcut_results = run_padded_prefix_test(active_models, test_trajectories, sample_size=20, padding_count=3)
 
     # ---------------------------------------------------------
@@ -176,6 +210,14 @@ def run_full_evaluation(
 
     summary_report = {
         "models_evaluated": [m.name for m in active_models],
+        "evaluation_protocol": {
+            "threshold_calibration": "per-model validation split; max F1 with FPR <= 0.10",
+            "gru_checkpoint": str(gru_checkpoint.relative_to(data_dir)),
+            "gru_checkpoint_base": "data_dir",
+            "gru_training_split_protocol": temporal_wrapper.model_config[
+                "evaluation_split_protocol"
+            ],
+        },
         "test_step_metrics": {
             m.name: {
                 "threshold": benchmark_results["test_step_metrics"][m.name]["threshold"],
@@ -222,7 +264,13 @@ def run_full_evaluation(
     for m in active_models:
         sm = summary_report["test_step_metrics"][m.name]
         tm = summary_report["temporal_metrics"][m.name]
-        sr = "HIGH" if "HIGH" in summary_report["shortcut_susceptibility"][m.name] else "LOW"
+        susceptibility = summary_report["shortcut_susceptibility"][m.name]
+        sr = (
+            "HIGH" if susceptibility.startswith("HIGH")
+            else "LOW" if susceptibility.startswith("LOW")
+            else "MIXED" if susceptibility.startswith("MIXED")
+            else "N/A"
+        )
         auc_str = f"{sm['roc_auc']:.3f}" if sm['roc_auc'] is not None else "N/A"
         delay_str = f"{tm['median_delay_steps']:.1f}" if tm['median_delay_steps'] is not None else "N/A"
         print(f"{m.name:<35} | {sm['f1']:<6.3f} | {auc_str:<8} | {delay_str:<13} | {sr}")
@@ -252,4 +300,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

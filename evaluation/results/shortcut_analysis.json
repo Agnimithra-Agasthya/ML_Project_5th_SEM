@@ -3,28 +3,44 @@
   "sample_trajectories_tested": 20,
   "model_performance": {
     "Semantic_Baseline_TFIDF": {
-      "premature_shortcut_alarms": 0,
-      "premature_shortcut_rate": 0.0,
-      "correct_shifted_onset_alarms": 0,
-      "correct_shifted_rate": 0.0,
-      "median_delay_after_shift": null,
-      "shortcut_susceptibility": "LOW / RESILIENT (tracks true attack despite padding)"
+      "premature_shortcut_alarms": 5,
+      "premature_shortcut_rate": 0.25,
+      "correct_shifted_onset_alarms": 10,
+      "correct_shifted_rate": 0.5,
+      "shifted_window_alarms_with_tolerance": 12,
+      "shifted_window_rate_with_tolerance": 0.6,
+      "median_delay_after_shift": 0.0,
+      "shortcut_susceptibility": "MIXED (premature alarms and shifted-onset detections)"
     },
     "Behavioral_Baseline_ActionSchema": {
-      "premature_shortcut_alarms": 0,
-      "premature_shortcut_rate": 0.0,
+      "premature_shortcut_alarms": 20,
+      "premature_shortcut_rate": 1.0,
       "correct_shifted_onset_alarms": 0,
       "correct_shifted_rate": 0.0,
-      "median_delay_after_shift": 0.0,
-      "shortcut_susceptibility": "LOW / RESILIENT (tracks true attack despite padding)"
+      "shifted_window_alarms_with_tolerance": 0,
+      "shifted_window_rate_with_tolerance": 0.0,
+      "median_delay_after_shift": -3.0,
+      "shortcut_susceptibility": "HIGH (triggers on step position rather than true attack)"
     },
     "StepNumber_Shortcut_Ablation": {
-      "premature_shortcut_alarms": 0,
-      "premature_shortcut_rate": 0.0,
+      "premature_shortcut_alarms": 20,
+      "premature_shortcut_rate": 1.0,
       "correct_shifted_onset_alarms": 0,
       "correct_shifted_rate": 0.0,
-      "median_delay_after_shift": 0.0,
-      "shortcut_susceptibility": "LOW / RESILIENT (tracks true attack despite padding)"
+      "shifted_window_alarms_with_tolerance": 0,
+      "shifted_window_rate_with_tolerance": 0.0,
+      "median_delay_after_shift": -2.0,
+      "shortcut_susceptibility": "HIGH (triggers on step position rather than true attack)"
+    },
+    "Temporal_ML_GoalDriftGRU": {
+      "premature_shortcut_alarms": 20,
+      "premature_shortcut_rate": 1.0,
+      "correct_shifted_onset_alarms": 0,
+      "correct_shifted_rate": 0.0,
+      "shifted_window_alarms_with_tolerance": 0,
+      "shifted_window_rate_with_tolerance": 0.0,
+      "median_delay_after_shift": -3.0,
+      "shortcut_susceptibility": "HIGH (triggers on step position rather than true attack)"
     }
   }
 }

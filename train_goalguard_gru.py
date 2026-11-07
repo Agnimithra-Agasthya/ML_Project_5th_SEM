@@ -311,6 +311,61 @@ def split_seed_families(
     return assigned
 
 
+def split_seed_families_from_jsonl(
+    split_dir: Path,
+    family_for_record: dict[str, str],
+) -> tuple[dict[str, set[str]], dict[str, int]]:
+    """Use GoalGuard's existing JSONL partitions as the GRU's seed-family split."""
+    assigned: dict[str, set[str]] = {
+        "train": set(),
+        "validation": set(),
+        "test": set(),
+    }
+    source_ids: dict[str, set[str]] = {name: set() for name in assigned}
+    assigned_split_by_family: dict[str, str] = {}
+
+    for split_name in assigned:
+        path = split_dir / f"goalguard_{split_name}.jsonl"
+        if not path.is_file():
+            raise FileNotFoundError(f"GoalGuard evaluation split not found: {path}")
+        with path.open("r", encoding="utf-8") as file:
+            for line_number, line in enumerate(file, 1):
+                if not line.strip():
+                    continue
+                record = json.loads(line)
+                if record.get("source_dataset") != "agentic_redteam_gold":
+                    raise ValueError(
+                        f"{path}:{line_number}: expected agentic_redteam_gold records"
+                    )
+                source_id = str(record.get("source_record_id") or "")
+                family_key = f"gold:{source_id}"
+                if not source_id or family_key not in family_for_record:
+                    raise ValueError(
+                        f"{path}:{line_number}: source_record_id is absent from the "
+                        "benchmark gold split"
+                    )
+                family = family_for_record[family_key]
+                previous_split = assigned_split_by_family.get(family)
+                if previous_split is not None and previous_split != split_name:
+                    raise ValueError(
+                        "An exact-duplicate seed family crosses GoalGuard partitions: "
+                        f"{family} ({previous_split}, {split_name})"
+                    )
+                assigned_split_by_family[family] = split_name
+                assigned[split_name].add(family)
+                source_ids[split_name].add(source_id)
+
+    if any(not assigned[name] for name in assigned):
+        raise ValueError("A GoalGuard JSONL partition contains no seed families")
+    if (
+        assigned["train"] & assigned["validation"]
+        or assigned["train"] & assigned["test"]
+        or assigned["validation"] & assigned["test"]
+    ):
+        raise AssertionError("GoalGuard JSONL seed-family splits overlap")
+    return assigned, {name: len(values) for name, values in source_ids.items()}
+
+
 def build_episodes(
     rows: list[dict[str, Any]],
     source: str,
@@ -1026,6 +1081,7 @@ def run(
     patience: int = 8,
     batch_size: int = 32,
     download: bool = True,
+    evaluation_split_dir: Path | None = None,
 ) -> dict[str, Any]:
     seed_everything(seed)
     gold_path, augmented_path = ensure_benchmark_files(data_dir, download)
@@ -1048,7 +1104,13 @@ def run(
     family_for_record, family_audit = make_family_assignments(
         gold_rows, augmented_rows
     )
-    split_families = split_seed_families(gold_rows, family_for_record, seed)
+    if evaluation_split_dir is None:
+        split_families = split_seed_families(gold_rows, family_for_record, seed)
+        evaluation_split_counts = None
+    else:
+        split_families, evaluation_split_counts = split_seed_families_from_jsonl(
+            evaluation_split_dir, family_for_record
+        )
     augmented_episodes = build_episodes(
         augmented_rows, "augmented", family_for_record
     )
@@ -1219,6 +1281,11 @@ def run(
                 "threshold": threshold,
                 "onset_tolerance_steps": tolerance,
                 "seed": seed,
+                "evaluation_split_protocol": (
+                    "goalguard_jsonl_seed_family_v1"
+                    if evaluation_split_dir is not None
+                    else None
+                ),
             },
         },
         model_path,
@@ -1275,6 +1342,10 @@ def run(
             "test": "gold rows from held-out test seed families",
             "fractions_target": {"train": 0.70, "validation": 0.15, "test": 0.15},
             "seed": seed,
+            "evaluation_split_dir": (
+                str(evaluation_split_dir) if evaluation_split_dir is not None else None
+            ),
+            "evaluation_split_source_record_counts": evaluation_split_counts,
             "family_audit": family_audit,
             "family_counts": {
                 name: len(values) for name, values in split_families.items()
@@ -1391,6 +1462,15 @@ def main() -> None:
     parser.add_argument("--max-epochs", type=int, default=50)
     parser.add_argument("--patience", type=int, default=8)
     parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument(
+        "--evaluation-split-dir",
+        type=Path,
+        help=(
+            "Use goalguard_train.jsonl, goalguard_validation.jsonl, and "
+            "goalguard_test.jsonl to keep GRU training isolated from the "
+            "evaluation test partition."
+        ),
+    )
     parser.add_argument("--no-download", action="store_true")
     args = parser.parse_args()
     report = run(
@@ -1401,6 +1481,7 @@ def main() -> None:
         patience=args.patience,
         batch_size=args.batch_size,
         download=not args.no_download,
+        evaluation_split_dir=args.evaluation_split_dir,
     )
     print(json.dumps(report, indent=2, ensure_ascii=False))
 

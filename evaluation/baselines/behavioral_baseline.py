@@ -157,7 +157,7 @@ def extract_step_behavioral_features(
 def make_behavioral_pipeline() -> Pipeline:
     """Builds a scikit-learn Pipeline with DictVectorizer and LogisticRegression."""
     return Pipeline([
-        ("vectorizer", DictVectorizer(sparse=True)),
+        ("vectorizer", DictVectorizer(sparse=False)),
         ("classifier", LogisticRegression(
             class_weight="balanced",
             max_iter=1000,
@@ -200,4 +200,3 @@ class BehavioralDriftDetector:
         data = joblib.load(path)
         detector = cls(pipeline=data["pipeline"], threshold=float(data["threshold"]))
         return detector
-
